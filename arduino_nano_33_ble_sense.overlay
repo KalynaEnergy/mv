@@ -1,0 +1,29 @@
+/{
+    custompwms {
+        compatible = "pwm-leds";
+    
+        custompwm0: custom_pwm_0 {
+            pwms =  <&pwm0 0 PWM_MSEC(20) PWM_POLARITY_INVERTED>,  // period and flag values will be overwritten
+                    <&pwm0 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>,
+                    <&pwm0 2 PWM_MSEC(20) PWM_POLARITY_NORMAL> 
+                   ;
+        };
+    };
+    aliases {
+        mycustompwm = &custompwm0;
+    };
+};
+
+&pwm0 {
+    center-aligned;
+};
+
+&pinctrl {
+    pwm0_default: pwm0_default {
+		group1 {
+			psels = <NRF_PSEL(PWM_OUT0, 0, 24)>,    // P0.24, red LED
+				    <NRF_PSEL(PWM_OUT1, 0, 27)>,    // P0.27 = Arduino Nano D9, LS switch
+                    <NRF_PSEL(PWM_OUT2, 0, 21)>;    // P0.21, Arduino Nano D8, HS switch
+		};
+	};
+};
