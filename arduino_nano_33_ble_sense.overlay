@@ -1,11 +1,15 @@
 /{
+    chosen {
+		zephyr,console = &cdc_acm_uart0;
+	};
+
     custompwms {
         compatible = "pwm-leds";
     
         custompwm0: custom_pwm_0 {
-            pwms =  <&pwm0 0 PWM_MSEC(20) PWM_POLARITY_INVERTED>,  // period and flag values will be overwritten
-                    <&pwm0 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>,
-                    <&pwm0 2 PWM_MSEC(20) PWM_POLARITY_NORMAL> 
+            pwms =  <&pwm0 0 PWM_MSEC(0) PWM_POLARITY_INVERTED>,  // period and flag values will be overwritten
+                    <&pwm0 1 PWM_MSEC(0) PWM_POLARITY_NORMAL>,
+                    <&pwm0 2 PWM_MSEC(0) PWM_POLARITY_NORMAL> 
                    ;
         };
     };
@@ -13,6 +17,14 @@
         mycustompwm = &custompwm0;
     };
 };
+
+
+&zephyr_udc0 {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
 
 &pwm0 {
     center-aligned;
