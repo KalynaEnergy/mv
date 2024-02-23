@@ -9,36 +9,6 @@
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/drivers/uart.h>
 
-
-#include <zephyr/types.h>
-#include <stddef.h>
-#include <string.h>
-#include <errno.h>
-#include <zephyr/sys/printk.h>
-#include <zephyr/sys/byteorder.h>
-#include <zephyr/kernel.h>
-#include <zephyr/drivers/gpio.h>
-#include <soc.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <bluetooth/services/lbs.h>
-#include <zephyr/settings/settings.h>
-#include <dk_buttons_and_leds.h>
-
-#define DEVICE_NAME             CONFIG_BT_DEVICE_NAME
-#define DEVICE_NAME_LEN         (sizeof(DEVICE_NAME) - 1)
-
-#define RUN_STATUS_LED          DK_LED1
-#define CON_STATUS_LED          DK_LED2
-#define RUN_LED_BLINK_INTERVAL  1000
-
-#define USER_LED                DK_LED3
-#define USER_BUTTON             DK_BTN1_MSK
-
-
 static const struct pwm_dt_spec custompwm0 = PWM_DT_SPEC_GET(DT_ALIAS(mycustompwm));
 
 #define PWM_FREQ 10000 // Hz
@@ -100,9 +70,10 @@ struct mvstate_t {
 struct mvstate_t mvstate = {
 	.poweron = false,
 	.duty_avg = DUTY_AVG,
+	/* ... other parts of system state that can be modified ... */
 };
 
-void log_state_handler(struct k_work* work) 
+void statechange_handler(struct k_work* work) 
 {
 	if (!mvstate.poweron) {
 		k_timer_start(&step_timer, K_USEC(0U), K_USEC(1000000U/(WAVEFORM_FREQ*STEPS)));
@@ -120,7 +91,7 @@ void log_state_handler(struct k_work* work)
 			0, PWM_POLARITY_NORMAL);
 
 		if (ret) {
-			printk("Error %d: failed to set pulse width in log_state_handler\n", ret);
+			printk("Error %d: failed to set pulse width in statechange_handler\n", ret);
 		}
 
 		mvstate.poweron = false;
@@ -128,10 +99,10 @@ void log_state_handler(struct k_work* work)
 	}
 	
 }
-// struct k_work log_state_work = {
-// 	.handler = log_state_handler,
-// };
-K_WORK_DEFINE(log_state_work, log_state_handler);
+struct k_work statechange_work = {
+	.handler = statechange_handler,
+};
+//K_WORK_DEFINE(statechange_work, statechange_handler);
 
 
 
@@ -178,121 +149,17 @@ void console_init() {
 
 }
 
+void init_lbs();
+
+
 int main(void)
 {
 	console_init();
 	pwm_init();
 	waveform_init();
-
-	//k_timer_start(&step_timer, K_USEC(0U), K_USEC(1000000U/(WAVEFORM_FREQ*STEPS)));
-
 	init_lbs();
 
 	k_sleep(K_FOREVER);
 	return 0;
 }
 
-static bool app_button_state;
-
-static const struct bt_data ad[] = {
-	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
-};
-
-static const struct bt_data sd[] = {
-	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_LBS_VAL),
-};
-
-static void connected(struct bt_conn *conn, uint8_t err)
-{
-	if (err) {
-		printk("Connection failed (err %u)\n", err);
-		return;
-	}
-
-	printk("Connected\n");
-}
-
-static void disconnected(struct bt_conn *conn, uint8_t reason)
-{
-	printk("Disconnected (reason %u)\n", reason);
-}
-
-BT_CONN_CB_DEFINE(conn_callbacks) = {
-	.connected        = connected,
-	.disconnected     = disconnected,
-};
-
-static struct bt_conn_auth_cb conn_auth_callbacks;
-static struct bt_conn_auth_info_cb conn_auth_info_callbacks;
-
-static void app_led_cb(bool led_state)
-{
-//	printk("Received set LED %d\n", led_state); // note this causes resets 
-	k_work_submit(&log_state_work);
-	dk_set_led(USER_LED, led_state);
-}
-
-static bool app_button_cb(void)
-{
-	return app_button_state;
-}
-
-static struct bt_lbs_cb lbs_callbacks = {
-	.led_cb    = app_led_cb,
-	.button_cb = NULL,
-};
-
-static void button_changed(uint32_t button_state, uint32_t has_changed)
-{
-	if (has_changed & USER_BUTTON) {
-		uint32_t user_button_state = button_state & USER_BUTTON;
-
-		bt_lbs_send_button_state(user_button_state);
-		app_button_state = user_button_state ? true : false;
-	}
-}
-
-static int init_button(void)
-{
-	int err;
-
-	err = dk_buttons_init(button_changed);
-	if (err) {
-		printk("Cannot init buttons (err: %d)\n", err);
-	}
-
-	return err;
-}
-
-void init_lbs() {
-	int err;
-	printk("Starting Bluetooth Minverter\n");
-
-	err = bt_enable(NULL);
-	if (err) {
-		printk("Bluetooth init failed (err %d)\n", err);
-		return;
-	}
-
-	printk("Bluetooth initialized\n");
-
-	if (IS_ENABLED(CONFIG_SETTINGS)) {
-		settings_load();
-	}
-
-	err = bt_lbs_init(&lbs_callbacks);
-	if (err) {
-		printk("Failed to init LBS (err:%d)\n", err);
-		return;
-	}
-
-	err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad),
-			      sd, ARRAY_SIZE(sd));
-	if (err) {
-		printk("Advertising failed to start (err %d)\n", err);
-		return;
-	}
-
-	printk("Advertising successfully started\n");
-}
