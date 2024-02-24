@@ -18,7 +18,10 @@
 #include <zephyr/settings/settings.h>
 #include <dk_buttons_and_leds.h>
 
-extern struct k_work statechange_work;
+extern struct statechange_work_data {
+    struct k_work work;
+    bool newstate;
+} statechange_work_data;
 
 #define DEVICE_NAME             CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN         (sizeof(DEVICE_NAME) - 1)
@@ -64,10 +67,13 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 };
 
 /* interrupt callback */
-static void app_led_cb(bool led_state)
+static void app_led_cb(bool newstate)
 {
-	k_work_submit(&statechange_work);
-	dk_set_led(USER_LED, led_state);
+    /* Set the state in your work data structure */
+    statechange_work_data.newstate = newstate;
+	/* submit work */
+    k_work_submit(&statechange_work_data.work);
+
 }
 
 static struct bt_lbs_cb lbs_callbacks = {

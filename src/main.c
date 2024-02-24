@@ -73,9 +73,28 @@ struct mvstate_t mvstate = {
 	/* ... other parts of system state that can be modified ... */
 };
 
+struct statechange_work_data {
+    struct k_work work;
+    bool newstate;
+};
+
+/* Create an instance of your custom structure */
+static void statechange_handler(struct k_work *work);
+
+struct statechange_work_data statechange_work_data = {
+    .work = Z_WORK_INITIALIZER(statechange_handler),
+};
+
 void statechange_handler(struct k_work* work) 
 {
-	if (!mvstate.poweron) {
+
+    struct statechange_work_data *work_data = CONTAINER_OF(work, struct statechange_work_data, work);
+ 	bool newstate = work_data->newstate;
+	if (newstate != !mvstate.poweron) {
+		printk("State change to %d despite existing state %d\n", newstate, mvstate.poweron);
+	}
+	
+	if (newstate) {
 		k_timer_start(&step_timer, K_USEC(0U), K_USEC(1000000U/(WAVEFORM_FREQ*STEPS)));
 		mvstate.poweron = true;
 		printk("Power state turned on\n");
@@ -99,13 +118,6 @@ void statechange_handler(struct k_work* work)
 	}
 	
 }
-struct k_work statechange_work = {
-	.handler = statechange_handler,
-};
-//K_WORK_DEFINE(statechange_work, statechange_handler);
-
-
-
 
 void pwm_init() {
 	if (!device_is_ready(custompwm0.dev)) {
