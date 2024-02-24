@@ -3,6 +3,6 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(mv)
 
-target_sources(app PRIVATE src/main.c src/bt.c)
+target_sources(app PRIVATE src/main.c src/bt.c src/adc.c)
 
 zephyr_library_include_directories(.)
