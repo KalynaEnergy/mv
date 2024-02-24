@@ -23,6 +23,8 @@ extern struct statechange_work_data {
     bool newstate;
 } statechange_work_data;
 
+extern void trip_off();
+
 #define DEVICE_NAME             CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN         (sizeof(DEVICE_NAME) - 1)
 
@@ -56,8 +58,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-	/* XXX should trip */
-	printk("WARNING: trip on disconnect unimplemented\n");
+	trip_off();
 	printk("Disconnected (reason %u)\n", reason);
 }
 

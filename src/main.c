@@ -85,6 +85,29 @@ struct statechange_work_data statechange_work_data = {
     .work = Z_WORK_INITIALIZER(statechange_handler),
 };
 
+/*
+  turn everything off and set to known state
+*/
+void trip_off() {
+	/* stop any running timers */
+	k_timer_stop(&step_timer);
+	k_msleep(1u); // otherwise it gets stuck sometimes
+
+	/* set all PWM to zero pulse width */
+	uint32_t ret = pwm_set_dt(&custompwm0, PWM_HZ(PWM_FREQ), 0);
+	ret |= pwm_set(custompwm0.dev, 2,
+		PWM_HZ(PWM_FREQ), 
+		0, PWM_POLARITY_NORMAL);
+	ret |= pwm_set(custompwm0.dev, 1,
+		PWM_HZ(PWM_FREQ), 
+		0, PWM_POLARITY_NORMAL);
+	if (ret) {
+		printk("Error %d: failed to set pulse width in trip_off\n", ret);
+	}
+	/* set state */
+	mvstate.poweron = false;
+}
+
 void statechange_handler(struct k_work* work) 
 {
 
@@ -99,21 +122,7 @@ void statechange_handler(struct k_work* work)
 		mvstate.poweron = true;
 		printk("Power state turned on\n");
 	} else {
-		k_timer_stop(&step_timer);
-		k_msleep(1u); // otherwise it gets stuck sometimes
-		uint32_t ret = pwm_set_dt(&custompwm0, PWM_HZ(PWM_FREQ), 0);
-		ret |= pwm_set(custompwm0.dev, 2,
-			PWM_HZ(PWM_FREQ), 
-			0, PWM_POLARITY_NORMAL);
-		ret |= pwm_set(custompwm0.dev, 1,
-			PWM_HZ(PWM_FREQ), 
-			0, PWM_POLARITY_NORMAL);
-
-		if (ret) {
-			printk("Error %d: failed to set pulse width in statechange_handler\n", ret);
-		}
-
-		mvstate.poweron = false;
+		trip_off();
 		printk("Power state turned off\n");
 	}
 	
@@ -124,16 +133,7 @@ void pwm_init() {
 		printk("Error: PWM device %s is not ready\n",
 		       custompwm0.dev->name);
 	} 
-	uint32_t ret = pwm_set_dt(&custompwm0, PWM_HZ(PWM_FREQ), 0);
-	ret |= pwm_set(custompwm0.dev, 2,
-		PWM_HZ(PWM_FREQ), 
-		0, PWM_POLARITY_NORMAL);
-	ret |= pwm_set(custompwm0.dev, 1,
-		PWM_HZ(PWM_FREQ), 
-		0, PWM_POLARITY_NORMAL);
-	if (ret) {
-		printk("failed pwm_set in pwm_init\n");
-	}
+	trip_off();
 	printk("pwm_init complete\n");
 }
 
