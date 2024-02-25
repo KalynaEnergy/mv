@@ -50,7 +50,9 @@ void step_handler(struct k_work *work)
 	static uint32_t oldpulsewidth_ns = 0;
 
 	if (!mvstate.poweron) {
-		printk("step_handler called when not powered\n");
+		printk("INFO: step_handler called when not powered\n"); // this is normal: we may have steps left in the workqueue even if the output has been turned off
+																// catching and ignoring them in the handler is recc https://docs.zephyrproject.org/latest/kernel/services/threads/workqueue.html#workqueue-best-practices
+		return;
 	}
 	uint32_t pulsewidth_ns = PWM_HZ(PWM_FREQ)*levels[count++ % STEPS]; 
 	uint32_t ret = pwm_set_dt(&custompwm0, 
@@ -76,9 +78,9 @@ void step_handler(struct k_work *work)
 		printk("Error %d: failed to set pulse width\n", ret);
 	}
 	if (!mvstate.poweron) {
-		printk("step_handler finished when not powered\n");
+		printk("ERR: step_handler finished when not powered\n"); // should not happen
+		trip_off(); // but if it does let's power off
 	}
-
 }
 
 K_WORK_DEFINE(step_work, step_handler);
@@ -111,12 +113,10 @@ struct statechange_work_data statechange_work_data = {
   turn everything off and set to known state
 */
 void trip_off() {
+	/* set state */
+	mvstate.poweron = false;
 	/* stop any running timers */
 	k_timer_stop(&step_timer);
-	k_timer_status_sync(&step_timer);
-	printk("trip_off delay begin\n");
-	k_msleep(10000u); // XXX should not be needed
-	printk("delay end\n");
 	/* set all PWM to zero pulse width */
 	uint32_t ret = pwm_set_dt(&custompwm0, PWM_HZ(PWM_FREQ), 0);
 	ret |= pwm_set(custompwm0.dev, 2,
@@ -128,13 +128,9 @@ void trip_off() {
 	if (ret) {
 		printk("Error %d: failed to set pulse width in trip_off\n", ret);
 	}
-	/* set state */
-	mvstate.poweron = false;
 }
 
-void statechange_handler(struct k_work* work) 
-{
-
+void statechange_handler(struct k_work* work) {
     struct statechange_work_data *work_data = CONTAINER_OF(work, struct statechange_work_data, work);
  	bool newstate = work_data->newstate;
 	if (newstate != !mvstate.poweron) {
@@ -148,8 +144,7 @@ void statechange_handler(struct k_work* work)
 	} else {
 		trip_off();
 		printk("Power state turned off\n");
-	}
-	
+	}	
 }
 
 void pwm_init() {
@@ -172,6 +167,7 @@ void console_init() {
 	uint32_t dtr = 0;
 
 	if (usb_enable(NULL)) {
+		printk("USB enable failed\n"); // won't be seen if using usb console
 		// return 0;
 	}
 
@@ -193,7 +189,7 @@ int main(void)
 	init_lbs();
 	adc_init();
 
-	while (0) {
+	while (1) {
 		adc_mainloop();
 		k_sleep(K_MSEC(1));
 	}

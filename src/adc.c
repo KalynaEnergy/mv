@@ -136,6 +136,11 @@ void adc_calc() {
 		int32_t val_mv[ARRAY_SIZE(adc_channels)];
 
 		int32_t v0_mv, vdd_mv;
+
+    // start_time = timing_counter_get(); // cpu time not wall time
+
+
+		// let api scale to mV using devicetree
 		for (size_t i = 0; i < BLOCK_SIZE; i++) {
 			v0_mv = raw_data[2*i+0]; 
 			int err = adc_raw_to_millivolts_dt(&adc_channels[0],
@@ -237,19 +242,10 @@ void adc_calc() {
 
 
 }
+
 void adc_mainloop() {
-
-//    adc_measure();
-
-		// for (size_t sample_i = 0; sample_i < BLOCK_SIZE; sample_i++) {
-
-		// conduct scaling and analysis
-		// start_time = timing_counter_get(); // cpu time not wall time
-
-		// let api scale to mV using devicetree
-
- //   adc_calc();
- k_sleep(K_MSEC(1));
+   adc_measure();
+   adc_calc();
 }
 
 
