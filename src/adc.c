@@ -63,43 +63,44 @@ static arm_rfft_fast_instance_f32 arm_rfft_S; // needs to be computed only once
 
 /* support up to 16 cpu die temperature sensors */
 static const struct device *const sensors[] = {LISTIFY(16, DIE_TEMPERATURE_SENSOR, ())};
-
+static const struct device *const die_temp_sensor = DEVICE_DT_GET(DT_ALIAS(die_temp0));
+static float64_t die_temperature(const struct device *dev);
 
 
 void adc_init() {
-        	/* Configure channels individually prior to sampling. */
+
+	/* Configure channels individually prior to sampling. */
 	for (size_t chan_i= 0U; chan_i< ARRAY_SIZE(adc_channels); chan_i++) {
 		if (!device_is_ready(adc_channels[chan_i].dev)) {
 			printk("ADC controller device %s not ready\n", adc_channels[chan_i].dev->name);
 			// return 0; // XXX
 		}
-
 		int err = adc_channel_setup_dt(&adc_channels[chan_i]);
 		if (err < 0) {
 			printk("Could not setup channel #%d (%d)\n", chan_i, err);
 			// return 0; // XXX should fail better
 		}
 	}
+	
 	// fft initialization
-
 	arm_status status = arm_rfft_fast_init_f32(&arm_rfft_S, BLOCK_SIZE);
 	if (status != ARM_MATH_SUCCESS) {
 		printk("arm_rfft_fast_init failure\n");
 	}
 	arm_hft95_f32(block_window, BLOCK_SIZE); // window function, good to about 0.05% amplitude, ~4 bins wide
-//	arm_accumulate_f32(block_window, BLOCK_SIZE, &window_sum);
+	//	arm_accumulate_f32(block_window, BLOCK_SIZE, &window_sum);
 	window_sum = window_sumsq = 0.f;
 	for (size_t i=0; i< BLOCK_SIZE; i++) {
 		window_sum += block_window[i];
 		window_sumsq += SQR(block_window[i]);
 	}
-  adc_measure();
+	
+	// initialize raw data to something nonzero by doing a read
+	adc_measure();
 
-	for (size_t i = 0; i < ARRAY_SIZE(sensors); i++) {
-		if (!device_is_ready(sensors[i])) {
-			printk("sensor: device %s not ready.\n", sensors[i]->name);
-			return 0;
-		}
+	if (!device_is_ready(die_temp_sensor)) {
+		printk("sensor: device %s not ready.\n", die_temp_sensor->name);
+		return 0;
 	}
 }
 
@@ -141,7 +142,7 @@ void adc_measure() {
 }
 
 void adc_calc() {
-    		float32_t vsum_volt = 0.f;
+		float32_t vsum_volt = 0.f;
 		int32_t vddsum_mv = 0;
 
 		float32_t v_shift = 0.f;
@@ -237,13 +238,14 @@ void adc_calc() {
 		if (harmonicPower < 0.f) {
 			harmonicPower = 0.f; // if harmonic distortion outweighed by noise, display 0.
 		}
-		printk("DC %.2f Tone: %.2f Hz mag %.2f Vrms phase %.3f rad THD %.2f%% rms noise %.2f V/rtHz\n", 
+		printk("DC %.2f Tone: %.2f Hz mag %.2f Vrms phase %.3f rad THD %.2f%% rms noise %.2f V/rtHz %.2f C\n", 
 			meanValue,
 			binWidth*maxIndex,
 			sqrt(2*tonePower/SQR(window_sum)), 
 			atan2(fftout[2*maxIndex+1], fftout[2*maxIndex]), 
 			100.f*sqrt(harmonicPower/tonePower),
-			sqrt(2.f*noisePower/(binWidth*noiseBins*window_sumsq))
+			sqrt(2.f*noisePower/(binWidth*noiseBins*window_sumsq)),
+			die_temperature(die_temp_sensor)
 			);
 
 		// end_time = timing_counter_get();
@@ -262,18 +264,16 @@ void adc_calc() {
 
 }
 
-static int print_die_temperature(const struct device *dev);
-
 void adc_mainloop() {
    adc_measure();
    adc_calc();
-   print_die_temperature(sensors[0]);
 }
 
-static int print_die_temperature(const struct device *dev)
+static float64_t die_temperature(const struct device *dev)
 {
 	struct sensor_value val;
 	int rc;
+	float64_t die_temp = 0.f;
 
 	/* fetch sensor samples */
 	rc = sensor_sample_fetch(dev);
@@ -287,9 +287,9 @@ static int print_die_temperature(const struct device *dev)
 		printk("Failed to get data (%d)\n", rc);
 		return rc;
 	}
-
-	printk("CPU Die temperature[%s]: %.1f °C\n", dev->name, sensor_value_to_double(&val));
-	return 0;
+	die_temp = sensor_value_to_double(&val);
+//	printk("CPU Die temperature[%s]: %.1f °C\n", dev->name, die_temp);
+	return die_temp;
 }
 
 
