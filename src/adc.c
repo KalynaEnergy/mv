@@ -56,13 +56,6 @@ float32_t block_window[BLOCK_SIZE]; // window, needs to be computed only once
 float32_t window_sum, window_sumsq; // window normalizations
 static arm_rfft_fast_instance_f32 arm_rfft_S; // needs to be computed only once
 
-
-#define DIE_TEMP_ALIAS(i) DT_ALIAS(_CONCAT(die_temp, i))
-#define DIE_TEMPERATURE_SENSOR(i, _)                                                               \
-	IF_ENABLED(DT_NODE_EXISTS(DIE_TEMP_ALIAS(i)), (DEVICE_DT_GET(DIE_TEMP_ALIAS(i)),))
-
-/* support up to 16 cpu die temperature sensors */
-static const struct device *const sensors[] = {LISTIFY(16, DIE_TEMPERATURE_SENSOR, ())};
 static const struct device *const die_temp_sensor = DEVICE_DT_GET(DT_ALIAS(die_temp0));
 static float64_t die_temperature(const struct device *dev);
 
