@@ -21,6 +21,10 @@ void arm_hft95_f32(
 
 #include <zephyr/timing/timing.h>
 
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/sys/printk.h>
+
+
 #define SQR(x) ((x)*(x))
 
 
@@ -53,6 +57,14 @@ float32_t window_sum, window_sumsq; // window normalizations
 static arm_rfft_fast_instance_f32 arm_rfft_S; // needs to be computed only once
 
 
+#define DIE_TEMP_ALIAS(i) DT_ALIAS(_CONCAT(die_temp, i))
+#define DIE_TEMPERATURE_SENSOR(i, _)                                                               \
+	IF_ENABLED(DT_NODE_EXISTS(DIE_TEMP_ALIAS(i)), (DEVICE_DT_GET(DIE_TEMP_ALIAS(i)),))
+
+/* support up to 16 cpu die temperature sensors */
+static const struct device *const sensors[] = {LISTIFY(16, DIE_TEMPERATURE_SENSOR, ())};
+
+
 
 void adc_init() {
         	/* Configure channels individually prior to sampling. */
@@ -82,6 +94,13 @@ void adc_init() {
 		window_sumsq += SQR(block_window[i]);
 	}
   adc_measure();
+
+	for (size_t i = 0; i < ARRAY_SIZE(sensors); i++) {
+		if (!device_is_ready(sensors[i])) {
+			printk("sensor: device %s not ready.\n", sensors[i]->name);
+			return 0;
+		}
+	}
 }
 
 void adc_measure() {
@@ -243,10 +262,36 @@ void adc_calc() {
 
 }
 
+static int print_die_temperature(const struct device *dev);
+
 void adc_mainloop() {
    adc_measure();
    adc_calc();
+   print_die_temperature(sensors[0]);
 }
+
+static int print_die_temperature(const struct device *dev)
+{
+	struct sensor_value val;
+	int rc;
+
+	/* fetch sensor samples */
+	rc = sensor_sample_fetch(dev);
+	if (rc) {
+		printk("Failed to fetch sample (%d)\n", rc);
+		return rc;
+	}
+
+	rc = sensor_channel_get(dev, SENSOR_CHAN_DIE_TEMP, &val);
+	if (rc) {
+		printk("Failed to get data (%d)\n", rc);
+		return rc;
+	}
+
+	printk("CPU Die temperature[%s]: %.1f °C\n", dev->name, sensor_value_to_double(&val));
+	return 0;
+}
+
 
 
 // from https://github.com/ARM-software/CMSIS-DSP/blob/main/Source/WindowFunctions/arm_hft95_f32.c

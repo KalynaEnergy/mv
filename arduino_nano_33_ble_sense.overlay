@@ -15,6 +15,7 @@
     };
     aliases {
         mycustompwm = &custompwm0;
+		die-temp0 = &temp;
     };
 
     zephyr,user {
