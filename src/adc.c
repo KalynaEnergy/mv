@@ -22,7 +22,8 @@ void arm_hft95_f32(
 #include <zephyr/timing/timing.h>
 
 #include <zephyr/drivers/sensor.h>
-#include <zephyr/sys/printk.h>
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(adc, CONFIG_ADC_LOG_LEVEL);
 
 
 #define SQR(x) ((x)*(x))
@@ -68,12 +69,12 @@ void adc_init() {
 	/* Configure channels individually prior to sampling. */
 	for (size_t chan_i= 0U; chan_i< ARRAY_SIZE(adc_channels); chan_i++) {
 		if (!device_is_ready(adc_channels[chan_i].dev)) {
-			printk("ADC controller device %s not ready\n", adc_channels[chan_i].dev->name);
+			LOG_ERR("ADC controller device %s not ready", adc_channels[chan_i].dev->name);
 			// return 0; // XXX
 		}
 		int err = adc_channel_setup_dt(&adc_channels[chan_i]);
 		if (err < 0) {
-			printk("Could not setup channel #%d (%d)\n", chan_i, err);
+			LOG_ERR("Could not setup channel #%d (%d)", chan_i, err);
 			// return 0; // XXX should fail better
 		}
 	}
@@ -81,7 +82,8 @@ void adc_init() {
 	// fft initialization
 	arm_status status = arm_rfft_fast_init_f32(&arm_rfft_S, BLOCK_SIZE);
 	if (status != ARM_MATH_SUCCESS) {
-		printk("arm_rfft_fast_init failure\n");
+		LOG_ERR("arm_rfft_fast_init failure");
+		// XXX fail better
 	}
 	arm_hft95_f32(block_window, BLOCK_SIZE); // window function, good to about 0.05% amplitude, ~4 bins wide
 	//	arm_accumulate_f32(block_window, BLOCK_SIZE, &window_sum);
@@ -95,7 +97,7 @@ void adc_init() {
 	adc_measure();
 
 	if (!device_is_ready(die_temp_sensor)) {
-		printk("sensor: device %s not ready.\n", die_temp_sensor->name);
+		LOG_ERR("sensor: device %s not ready", die_temp_sensor->name);
 		return 0;
 	}
 }
@@ -120,7 +122,7 @@ void adc_measure() {
 		sequence.options = &opts;
 		int err = adc_read(adc_channels[0].dev, &sequence); // I think what device is linked doesn't depend on the channel
 		if (err < 0) {
-			printk("Could not read (%d)\n", err);
+			LOG_ERR("Could not read (%d)", err);
 			return; // XXX error handling
 		} 
 		// else {
@@ -162,13 +164,13 @@ void adc_calc() {
 			int err = adc_raw_to_millivolts_dt(&adc_channels[0],
 									&v0_mv);
 			if (err < 0) {
-					printk(" (value in mV not available)\n");
+				LOG_ERR(" (value in mV not available)");
 			}
 			vdd_mv = raw_data[2*i+1]; 
 			err = adc_raw_to_millivolts_dt(&adc_channels[1],
 						&vdd_mv);
 			if (err < 0) {
-					printk(" (value in mV not available)\n");
+				LOG_ERR(" (value in mV not available)");
 			}
 			// then offset and scale to volts based on voltage dividers
 			sample_data[i] = VOLTAGE_DIVIDER_SF*(v0_mv - vdd_mv/2); 
@@ -202,7 +204,7 @@ void adc_calc() {
 		arm_cmplx_mag_squared_f32(&fftout[1], &ps[1], BLOCK_SIZE/2-1);
 		arm_max_f32(ps, BLOCK_SIZE, &maxValue, &maxIndex);
 		if (maxIndex < 5) {
-			printk("Max power index %" PRId32 " too small, results will be wrong\n", maxIndex);
+			LOG_WRN("Max power index %" PRId32 " too small, results may be wrong", maxIndex);
 		}
 		float32_t tonePower = ps[maxIndex]; 
 		float32_t harmonicPower = 0.f;
@@ -241,7 +243,7 @@ void adc_calc() {
 		sysdata[4] = 100.f*sqrt(harmonicPower/tonePower);  
 		sysdata[5] = sqrt(2.f*noisePower/(binWidth*noiseBins*window_sumsq));
 		sysdata[6] = die_temperature(die_temp_sensor);
-		printk("DC %.2f Tone: %.2f Hz mag %.2f Vrms phase %.3f rad THD %.2f%% rms noise %.2f V/rtHz %.2f C\n", 
+		LOG_INF("DC %.2f Tone: %.2f Hz mag %.2f Vrms phase %.3f rad THD %.2f%% rms noise %.2f V/rtHz %.2f C", 
 			sysdata[0], sysdata[1], sysdata[2], sysdata[3], sysdata[4], sysdata[5], sysdata[6]);
 		// end_time = timing_counter_get();
 		// total_cycles = timing_cycles_get(&start_time, &end_time);
@@ -273,13 +275,13 @@ static float64_t die_temperature(const struct device *dev)
 	/* fetch sensor samples */
 	rc = sensor_sample_fetch(dev);
 	if (rc) {
-		printk("Failed to fetch sample (%d)\n", rc);
+		LOG_ERR("Failed to fetch sample (%d)", rc);
 		return rc;
 	}
 
 	rc = sensor_channel_get(dev, SENSOR_CHAN_DIE_TEMP, &val);
 	if (rc) {
-		printk("Failed to get data (%d)\n", rc);
+		LOG_ERR("Failed to get data (%d)", rc);
 		return rc;
 	}
 	die_temp = sensor_value_to_double(&val);

@@ -8,10 +8,13 @@
 
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/drivers/uart.h>
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(main);// , CONFIG_MAIN_LOG_LEVEL);
+
 
 /* interfaces */
 
-void init_lbs();
+void init_bt();
 void adc_init();
 void adc_mainloop();
 
@@ -56,7 +59,7 @@ void step_handler(struct k_work *work)
 	static uint32_t oldpulsewidth_ns = 0;
 
 	if (!mv_param.PermitService) {
-		printk("INFO: step_handler called when not powered\n"); // this is normal: we may have steps left in the workqueue even if the output has been turned off
+		LOG_INF("step_handler called when not powered"); // this is normal: we may have steps left in the workqueue even if the output has been turned off
 																// catching and ignoring them in the handler is recc https://docs.zephyrproject.org/latest/kernel/services/threads/workqueue.html#workqueue-best-practices
 		return;
 	}
@@ -81,10 +84,12 @@ void step_handler(struct k_work *work)
 	}
 	oldpulsewidth_ns = pulsewidth_ns;
 	if (ret) {
-		printk("Error %d: failed to set pulse width\n", ret);
+		LOG_ERR("Error %d: failed to set pulse width", ret);
+		// XXX
+		trip_off(); // shouldn't happen, but if it does, trip?
 	}
 	if (!mv_param.PermitService) {
-		printk("ERR: step_handler finished when not powered\n"); // should not happen
+		LOG_ERR("ERR: step_handler finished when not powered"); // should not happen
 		trip_off(); // but if it does let's power off
 	}
 }
@@ -98,7 +103,7 @@ void step_timer_handler(struct k_timer *dummy)
 
 void step_timer_off()
 {
-	printk("step_timer_off called\n");
+	LOG_DBG("step_timer_off called\n");
 }
 
 K_TIMER_DEFINE(step_timer, step_timer_handler, step_timer_off);
@@ -132,7 +137,8 @@ void trip_off() {
 		PWM_HZ(PWM_FREQ), 
 		0, PWM_POLARITY_NORMAL);
 	if (ret) {
-		printk("Error %d: failed to set pulse width in trip_off\n", ret);
+		LOG_ERR("Error %d: failed to set pulse width in trip_off", ret);
+		// XXX
 	}
 }
 
@@ -140,26 +146,26 @@ void statechange_handler(struct k_work* work) {
     struct statechange_work_data *work_data = CONTAINER_OF(work, struct statechange_work_data, work);
  	bool newstate = work_data->newstate;
 	if (newstate != !mv_param.PermitService) {
-		printk("State change to %d despite existing state %d\n", newstate, mv_param.PermitService);
+		LOG_INF("State change to %d despite existing state %d", newstate, mv_param.PermitService);
 	}
 	
 	if (newstate) {
 		k_timer_start(&step_timer, K_USEC(0U), K_USEC(1000000U/(WAVEFORM_FREQ*STEPS)));
 		mv_param.PermitService = true;
-		printk("Power state turned on\n");
+		LOG_INF("Power state turned on");
 	} else {
 		trip_off();
-		printk("Power state turned off\n");
+		LOG_INF("Power state turned off");
 	}	
 }
 
 void pwm_init() {
 	if (!device_is_ready(custompwm0.dev)) {
-		printk("Error: PWM device %s is not ready\n",
+		LOG_ERR("Error: PWM device %s is not ready",
 		       custompwm0.dev->name);
 	} 
 	trip_off();
-	printk("pwm_init complete\n");
+	LOG_INF("pwm_init complete");
 }
 
 void waveform_init() {
@@ -174,6 +180,7 @@ void console_init() {
 
 	if (usb_enable(NULL)) {
 		printk("USB enable failed\n"); // won't be seen if using usb console
+		LOG_ERR("USB enable failed"); // again, not likely to be seen
 		// return 0;
 	}
 
@@ -183,7 +190,7 @@ void console_init() {
 		k_sleep(K_MSEC(100));
 	}
 
-	printk("Console_init complete\n");
+	LOG_INF("Console_init complete");
 
 }
 
@@ -192,7 +199,7 @@ int main(void)
 	console_init();
 	pwm_init();
 	waveform_init();
-	init_lbs();
+	init_bt();
 	adc_init();
 
 	while (1) {
