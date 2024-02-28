@@ -59,6 +59,9 @@ static arm_rfft_fast_instance_f32 arm_rfft_S; // needs to be computed only once
 static const struct device *const die_temp_sensor = DEVICE_DT_GET(DT_ALIAS(die_temp0));
 static float64_t die_temperature(const struct device *dev);
 
+extern float32_t sysdata[];
+
+
 
 void adc_init() {
 
@@ -231,16 +234,15 @@ void adc_calc() {
 		if (harmonicPower < 0.f) {
 			harmonicPower = 0.f; // if harmonic distortion outweighed by noise, display 0.
 		}
+		sysdata[0] = meanValue;
+		sysdata[1] = binWidth*maxIndex;
+		sysdata[2] = sqrt(2*tonePower/SQR(window_sum));
+		sysdata[3] = atan2(fftout[2*maxIndex+1], fftout[2*maxIndex]);
+		sysdata[4] = 100.f*sqrt(harmonicPower/tonePower);  
+		sysdata[5] = sqrt(2.f*noisePower/(binWidth*noiseBins*window_sumsq));
+		sysdata[6] = die_temperature(die_temp_sensor);
 		printk("DC %.2f Tone: %.2f Hz mag %.2f Vrms phase %.3f rad THD %.2f%% rms noise %.2f V/rtHz %.2f C\n", 
-			meanValue,
-			binWidth*maxIndex,
-			sqrt(2*tonePower/SQR(window_sum)), 
-			atan2(fftout[2*maxIndex+1], fftout[2*maxIndex]), 
-			100.f*sqrt(harmonicPower/tonePower),
-			sqrt(2.f*noisePower/(binWidth*noiseBins*window_sumsq)),
-			die_temperature(die_temp_sensor)
-			);
-
+			sysdata[0], sysdata[1], sysdata[2], sysdata[3], sysdata[4], sysdata[5], sysdata[6]);
 		// end_time = timing_counter_get();
 		// total_cycles = timing_cycles_get(&start_time, &end_time);
 		// total_ns = timing_cycles_to_ns(total_cycles); // not wall time

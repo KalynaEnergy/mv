@@ -29,27 +29,33 @@ float levels[STEPS]; // holds duty cycles, duty = what fraction of time HS switc
 
 #define TWO_PI 6.28318530718f
 
-struct mvstate_t {
-	bool poweron;
+
+
+struct mv_param_t {
+	/* IEEE 1547 10.6, tables 30-40 */
+	/* ... */
+	bool PermitService;
+	/* .... */
+
 	float32_t duty_avg;
 	float32_t duty_range;
-
 };
 
-struct mvstate_t mvstate = {
-	.poweron = false,
+struct mv_param_t mv_param = {
+	.PermitService = false,
 	.duty_avg = DUTY_AVG,
 	.duty_range = DUTY_RANGE,
-	/* ... other parts of system state that can be modified ... */
 };
 
+
+float32_t sysdata[7] = {0.f};
 
 void step_handler(struct k_work *work)
 {
 	static uint32_t count = 0;
 	static uint32_t oldpulsewidth_ns = 0;
 
-	if (!mvstate.poweron) {
+	if (!mv_param.PermitService) {
 		printk("INFO: step_handler called when not powered\n"); // this is normal: we may have steps left in the workqueue even if the output has been turned off
 																// catching and ignoring them in the handler is recc https://docs.zephyrproject.org/latest/kernel/services/threads/workqueue.html#workqueue-best-practices
 		return;
@@ -77,7 +83,7 @@ void step_handler(struct k_work *work)
 	if (ret) {
 		printk("Error %d: failed to set pulse width\n", ret);
 	}
-	if (!mvstate.poweron) {
+	if (!mv_param.PermitService) {
 		printk("ERR: step_handler finished when not powered\n"); // should not happen
 		trip_off(); // but if it does let's power off
 	}
@@ -114,7 +120,7 @@ struct statechange_work_data statechange_work_data = {
 */
 void trip_off() {
 	/* set state */
-	mvstate.poweron = false;
+	mv_param.PermitService = false;
 	/* stop any running timers */
 	k_timer_stop(&step_timer);
 	/* set all PWM to zero pulse width */
@@ -133,13 +139,13 @@ void trip_off() {
 void statechange_handler(struct k_work* work) {
     struct statechange_work_data *work_data = CONTAINER_OF(work, struct statechange_work_data, work);
  	bool newstate = work_data->newstate;
-	if (newstate != !mvstate.poweron) {
-		printk("State change to %d despite existing state %d\n", newstate, mvstate.poweron);
+	if (newstate != !mv_param.PermitService) {
+		printk("State change to %d despite existing state %d\n", newstate, mv_param.PermitService);
 	}
 	
 	if (newstate) {
 		k_timer_start(&step_timer, K_USEC(0U), K_USEC(1000000U/(WAVEFORM_FREQ*STEPS)));
-		mvstate.poweron = true;
+		mv_param.PermitService = true;
 		printk("Power state turned on\n");
 	} else {
 		trip_off();
@@ -158,7 +164,7 @@ void pwm_init() {
 
 void waveform_init() {
 	for (int i =0; i < STEPS; i++) {
-		levels[i] = mvstate.duty_avg*(1 + mvstate.duty_range*sin(TWO_PI*i/STEPS));
+		levels[i] = mv_param.duty_avg*(1 + mv_param.duty_range*sin(TWO_PI*i/STEPS));
 	}
 }
 
