@@ -21,6 +21,10 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt, CONFIG_BT_LOG_LEVEL);
 
+#include <math.h>
+#include "arm_math.h"
+
+
 /* interfaces */
 
 extern struct statechange_work_data {
@@ -67,25 +71,43 @@ void count_handler(struct k_work *work) {
 			      sd, ARRAY_SIZE(sd));
 }
 
-
+struct bt_conn_info info;
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
 		LOG_ERR("Connection failed (err %u)\n", err);
 		return;
 	}
-	LOG_INF("Connected\n");
+
+	err = bt_conn_get_info(conn, &info);
+	if (err) {
+		LOG_ERR("bt_conn_get_info() returned %d", err);
+		return;
+	}
+	LOG_INF("Connected");
+	float32_t connection_interval = info.le.interval*1.25f; // in ms
+	uint16_t supervision_timeout = info.le.timeout*10; // in ms
+	LOG_INF("Connection parameters: interval %.2f ms, latency %d intervals, timeout %d ms", 
+		connection_interval, info.le.latency, supervision_timeout);
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	trip_off();
-	LOG_INF("Disconnected (reason %u)\n", reason);
+	LOG_INF("Disconnected (reason %u)", reason);
+}
+
+static void on_le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t latency, uint16_t timeout)
+{
+    float32_t connection_interval = interval*1.25f;         // in ms
+    uint16_t supervision_timeout = timeout*10;          // in ms
+    LOG_INF("Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms", connection_interval, latency, supervision_timeout);
 }
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.connected        = connected,
 	.disconnected     = disconnected,
+	.le_param_updated = on_le_param_updated,
 };
 
 /* interrupt callback */
@@ -108,7 +130,6 @@ void count_timer_handler(struct k_timer *dummy)
 {
     k_work_submit(&count_work);
 }
-
 
 K_TIMER_DEFINE(count_timer, count_timer_handler, NULL);
 
@@ -142,7 +163,5 @@ void init_bt() {
 	}
 
 	k_timer_start(&count_timer, K_USEC(0U), K_MSEC(1000U));
-
-
 	LOG_INF("Advertising successfully started");
 }
