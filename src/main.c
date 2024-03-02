@@ -11,12 +11,9 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main);// , CONFIG_MAIN_LOG_LEVEL);
 
+#include "mv.h"
 
-/* interfaces */
 
-void init_bt();
-void adc_init();
-void adc_mainloop();
 
 
 static const struct pwm_dt_spec custompwm0 = PWM_DT_SPEC_GET(DT_ALIAS(mycustompwm));
@@ -108,10 +105,6 @@ void step_timer_off()
 
 K_TIMER_DEFINE(step_timer, step_timer_handler, step_timer_off);
 
-struct statechange_work_data {
-    struct k_work work;
-    bool newstate;
-};
 
 /* Create an instance of your custom structure */
 static void statechange_handler(struct k_work *work);

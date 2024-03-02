@@ -14,32 +14,31 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
-#include <bluetooth/services/lbs.h>
+#include "bt_mv.h"
 #include <zephyr/settings/settings.h>
-#include <dk_buttons_and_leds.h>
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(bt, CONFIG_BT_LOG_LEVEL);
+LOG_MODULE_REGISTER(bt, LOG_LEVEL_DBG);
 
 #include <math.h>
 #include "arm_math.h"
 
-
-/* interfaces */
-
-extern struct statechange_work_data {
-    struct k_work work;
-    bool newstate;
-} statechange_work_data;
-
-extern void trip_off();
+#include "mv.h"
 
 #define DEVICE_NAME             CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN         (sizeof(DEVICE_NAME) - 1)
 
 
 // custom parameters for advertising, 
-struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(BT_LE_ADV_OPT_NONE, 800, 801, NULL);
+//struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(BT_LE_ADV_OPT_NONE, 800, 801, NULL);
+static struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(
+	(BT_LE_ADV_OPT_CONNECTABLE |
+	 BT_LE_ADV_OPT_USE_IDENTITY), /* Connectable advertising and use identity address */
+	800, /* Min Advertising Interval 500ms (800*0.625ms) */
+	801, /* Max Advertising Interval 500.625ms (801*0.625ms) */
+	NULL); /* Set to NULL for undirected advertising */
+
+
 
 // code for including custom dynamic data in advertising packet
 #define COMPANY_ID_CODE 0x0059 // use Nordic's code for development, must apply to Bluetooth SIG for a unique ID
@@ -56,8 +55,9 @@ static const struct bt_data ad[] = {
 };
 
 // currently UUID for Nordic LBS service
+// service UUID for advertising from bt_mv
 static const struct bt_data sd[] = {
-	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_128_ENCODE(0x00001523, 0x1212, 0xefde, 0x1523, 0x785feabcd123)),
+	BT_DATA_BYTES(BT_DATA_UUID128_ALL,  BT_UUID_MV_VAL),
 };
 // static unsigned char url_data[] ={0x17,'/','/','k','a','l','n','a','.','e','n',
 //                                  'e','r','g','y'};
@@ -119,9 +119,14 @@ static void statechange_cb(bool newstate)
     k_work_submit(&statechange_work_data.work);
 }
 
-static struct bt_lbs_cb lbs_callbacks = {
-	.led_cb    = statechange_cb,
-	.button_cb = NULL,
+static int32_t readval_cb()
+{
+	return (int32_t) (sysdata[1]*1000); // frequency in millihertz
+}
+
+static struct bt_mv_cb bt_mv_callbacks = {
+	.statechange_cb    = statechange_cb,
+	.readval_cb = readval_cb,
 };
 
 K_WORK_DEFINE(count_work, count_handler);
@@ -148,15 +153,24 @@ void init_bt() {
 		settings_load();
 	}
 
-	err = bt_lbs_init(&lbs_callbacks);
+	err = bt_mv_init(&bt_mv_callbacks);
 	if (err) {
 		LOG_ERR("Failed to init LBS (err:%d)", err);
 		return;
 	}
 
+//	err = my_lbs_init(&app_callbacks);
+	if (err) {
+		LOG_ERR("Failed to init BT MV service (err:%d)", err);
+		return;
+	}
+
+
 	// XXX use adv_param custom parameters?
-	err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad),
-			      sd, ARRAY_SIZE(sd));
+	//err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad),
+	//		      sd, ARRAY_SIZE(sd));
+	err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+	
 	if (err) {
 		LOG_ERR("Advertising failed to start (err %d)", err);
 		return;

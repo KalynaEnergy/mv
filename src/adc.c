@@ -23,7 +23,9 @@ void arm_hft95_f32(
 
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(adc, CONFIG_ADC_LOG_LEVEL);
+LOG_MODULE_REGISTER(adc, CONFIG_ADC_LOG_LEVEL); // LOG_LEVEL_WRN); // CONFIG_ADC_LOG_LEVEL);
+
+#include "mv.h"
 
 
 #define SQR(x) ((x)*(x))
@@ -59,8 +61,6 @@ static arm_rfft_fast_instance_f32 arm_rfft_S; // needs to be computed only once
 
 static const struct device *const die_temp_sensor = DEVICE_DT_GET(DT_ALIAS(die_temp0));
 static float64_t die_temperature(const struct device *dev);
-
-extern float32_t sysdata[];
 
 
 
@@ -204,7 +204,7 @@ void adc_calc() {
 		arm_cmplx_mag_squared_f32(&fftout[1], &ps[1], BLOCK_SIZE/2-1);
 		arm_max_f32(ps, BLOCK_SIZE, &maxValue, &maxIndex);
 		if (maxIndex < 5) {
-			LOG_WRN("Max power index %" PRId32 " too small, results may be wrong", maxIndex);
+			LOG_INF("Max power index %" PRId32 " < 5, interpret with care", maxIndex);
 		}
 		float32_t tonePower = ps[maxIndex]; 
 		float32_t harmonicPower = 0.f;
