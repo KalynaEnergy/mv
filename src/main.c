@@ -15,27 +15,18 @@ LOG_MODULE_REGISTER(main);// , CONFIG_MAIN_LOG_LEVEL);
 
 
 
-
 static const struct pwm_dt_spec custompwm0 = PWM_DT_SPEC_GET(DT_ALIAS(mycustompwm));
 
-#define PWM_FREQ 10000 // Hz
-#define WAVEFORM_FREQ 3 // Hz
-
-#define STEPS 180
 float levels[STEPS]; // holds duty cycles, duty = what fraction of time HS switch is on
-#define DUTY_AVG 0.5f // 0. to 1.
-#define DUTY_RANGE 0.90f // 0. to 1.
-#define DEADTIME_NS 500U
 
 #define TWO_PI 6.28318530718f
-
-
 
 struct mv_param_t {
 	/* IEEE 1547 10.6, tables 30-40 */
 	/* ... */
 	bool PermitService;
 	/* .... */
+	
 
 	float32_t duty_avg;
 	float32_t duty_range;
@@ -47,6 +38,14 @@ struct mv_param_t mv_param = {
 	.duty_range = DUTY_RANGE,
 };
 
+struct mv_nameplate_t mv_nameplate = {
+	.HardwareID = "unsupported",
+	.VoltageNominal = -999.f,
+	.Current = -999.f,
+	.ActivePower = -999.f,
+	.ApparentPower = -999.f,
+	.ReactivePower = -999.f,
+};
 
 float32_t sysdata[7] = {0.f};
 
@@ -187,6 +186,16 @@ void console_init() {
 
 }
 
+int init_hw_id() {
+	int err = hw_id_get(mv_nameplate.HardwareID, ARRAY_SIZE(mv_nameplate.HardwareID));
+	if (err) {
+		LOG_ERR("hw_id_get failed (err %d)\n", err);
+		return err;
+	}
+	LOG_INF("hw_id: %s\n", mv_nameplate.HardwareID);
+	return 0;
+}
+
 int main(void)
 {
 	console_init();
@@ -194,6 +203,7 @@ int main(void)
 	waveform_init();
 	init_bt();
 	adc_init();
+	init_hw_id();
 
 	while (1) {
 		adc_mainloop();

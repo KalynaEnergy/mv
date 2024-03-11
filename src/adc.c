@@ -47,7 +47,7 @@ static const struct adc_dt_spec adc_channels[] = {
 
 
 #define BLOCK_SIZE 4096
-#define SAMPLE_RATE 16340.4f // constant is sampling rate, determined by experimental calibration
+#define SAMPLE_RATE 15640.4f // constant is sampling rate, determined by experimental calibration
 #define VOLTAGE_DIVIDER_SF 0.241f // scale factor 241 is 2*820k/6.8k, *1e-3 (mV to V)
 
 uint16_t raw_data[BLOCK_SIZE*2] = {0};
