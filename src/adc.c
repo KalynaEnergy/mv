@@ -5,9 +5,6 @@
 #include <math.h>
 #include "arm_math.h"
 #include "arm_const_structs.h"
-void arm_hft95_f32(
-        float32_t * pDst,
-        uint32_t blockSize);
 
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
@@ -287,28 +284,4 @@ static float64_t die_temperature(const struct device *dev)
 	die_temp = sensor_value_to_double(&val);
 //	printk("CPU Die temperature[%s]: %.1f °C\n", dev->name, die_temp);
 	return die_temp;
-}
-
-
-
-// from https://github.com/ARM-software/CMSIS-DSP/blob/main/Source/WindowFunctions/arm_hft95_f32.c
-void arm_hft95_f32(
-        float32_t * pDst,
-        uint32_t blockSize)
-{
-   float32_t k = 2.0f / ((float32_t) blockSize);
-   float32_t w;
-
-   for(uint32_t i=0;i<blockSize;i++)
-   {
-    w = PI * (i * k);
-        w =
-    (1.0f -
-     1.9383379f * cosf (w) +
-     1.3045202f * cosf (2.f * w) -
-     0.4028270f * cosf (3.f * w) + 0.0350665f * cosf (4.f * w));
-
-   
-     pDst[i] = w;
-   }
 }
